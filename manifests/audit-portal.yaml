@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anz-audit-portal
+  namespace: ${NAMESPACE}
+  labels:
+    app: anz-audit-portal
+    app.kubernetes.io/part-of: anz-governance-poc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: anz-audit-portal
+  template:
+    metadata:
+      labels:
+        app: anz-audit-portal
+        app.kubernetes.io/part-of: anz-governance-poc
+    spec:
+      serviceAccountName: anz-poc-agent
+      containers:
+        - name: audit-portal
+          image: ${AUDIT_PORTAL_IMAGE}
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: anz-poc-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: anz-audit-portal
+  namespace: ${NAMESPACE}
+  labels:
+    app: anz-audit-portal
+spec:
+  selector:
+    app: anz-audit-portal
+  ports:
+    - port: 8501
+      targetPort: 8501
+      protocol: TCP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: anz-audit-portal
+  namespace: ${NAMESPACE}
+  labels:
+    app: anz-audit-portal
+spec:
+  to:
+    kind: Service
+    name: anz-audit-portal
+  port:
+    targetPort: 8501
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

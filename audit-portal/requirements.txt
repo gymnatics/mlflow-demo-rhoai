@@ -1,0 +1,5 @@
+streamlit
+mlflow[kubernetes,genai]>=3.11
+pandas
+openpyxl
+plotly

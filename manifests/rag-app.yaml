@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anz-rag-app
+  namespace: ${NAMESPACE}
+  labels:
+    app: anz-rag-app
+    app.kubernetes.io/part-of: anz-governance-poc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: anz-rag-app
+  template:
+    metadata:
+      labels:
+        app: anz-rag-app
+        app.kubernetes.io/part-of: anz-governance-poc
+    spec:
+      serviceAccountName: anz-poc-agent
+      containers:
+        - name: rag-app
+          image: ${RAG_APP_IMAGE}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: anz-poc-config
+          env:
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: anz-poc-secrets
+                  key: llm-api-key
+                  optional: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: anz-rag-app
+  namespace: ${NAMESPACE}
+  labels:
+    app: anz-rag-app
+spec:
+  selector:
+    app: anz-rag-app
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: anz-rag-app
+  namespace: ${NAMESPACE}
+  labels:
+    app: anz-rag-app
+spec:
+  to:
+    kind: Service
+    name: anz-rag-app
+  port:
+    targetPort: 8000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

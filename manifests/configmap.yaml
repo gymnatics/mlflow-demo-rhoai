@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anz-poc-config
+  namespace: ${NAMESPACE}
+data:
+  MLFLOW_TRACKING_URI: "${MLFLOW_TRACKING_URI}"
+  MLFLOW_TRACKING_AUTH: "kubernetes-namespaced"
+  MLFLOW_TRACKING_INSECURE_TLS: "true"
+  MLFLOW_EXPERIMENT_NAME: "anz-rag-governance-poc"
+  MLFLOW_WORKSPACE: "${NAMESPACE}"
+  LLM_ENDPOINT: "${LLM_ENDPOINT}"
+  LLM_MODEL: "${LLM_MODEL}"
+  APP_VERSION: "${APP_VERSION}"

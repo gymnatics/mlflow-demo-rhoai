@@ -1,0 +1,9 @@
+chainlit
+mlflow[kubernetes,genai]>=3.11
+langchain
+langchain-community
+langchain-openai
+langchain-huggingface
+faiss-cpu
+sentence-transformers
+openai

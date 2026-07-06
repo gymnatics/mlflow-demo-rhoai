@@ -1,0 +1,122 @@
+# OpenTelemetry Collector — Reference Template
+#
+# This manifest deploys an OTel Collector that receives OTLP traces from MLflow
+# and forwards them to an external SIEM/observability platform.
+#
+# NOT deployed in the POC by default. See docs/OTEL-SIEM-INTEGRATION.md.
+#
+# To enable:
+#   1. Customise the exporters section for your target (Splunk, Elasticsearch, etc.)
+#   2. Apply this manifest: oc apply -f otel-collector.yaml
+#   3. Set OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317 on the MLflow CR
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: ${NAMESPACE}
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 5s
+        send_batch_size: 256
+
+    exporters:
+      # --- Example: log to stdout (useful for testing) ---
+      debug:
+        verbosity: detailed
+
+      # --- Example: Elasticsearch / OpenSearch ---
+      # elasticsearch:
+      #   endpoints: ["https://elasticsearch.example.com:9200"]
+      #   traces_index: "mlflow-traces"
+      #   user: "admin"
+      #   password: "${ELASTICSEARCH_PASSWORD}"
+
+      # --- Example: Splunk HEC ---
+      # splunk_hec:
+      #   token: "${SPLUNK_HEC_TOKEN}"
+      #   endpoint: "https://splunk-hec.example.com:8088/services/collector"
+      #   source: "mlflow"
+      #   sourcetype: "opentelemetry"
+
+      # --- Example: Jaeger ---
+      # otlp/jaeger:
+      #   endpoint: "jaeger-collector:4317"
+      #   tls:
+      #     insecure: true
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: ${NAMESPACE}
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: collector
+          image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:latest
+          args: ["--config=/etc/otel/config.yaml"]
+          ports:
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: ${NAMESPACE}
+  labels:
+    app: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
