@@ -1,5 +1,7 @@
 streamlit
 mlflow[kubernetes,genai]>=3.11
+kfp
 pandas
 openpyxl
 plotly
+eval-hub-sdk[client]

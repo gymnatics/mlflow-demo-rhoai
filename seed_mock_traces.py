@@ -6,11 +6,11 @@ import time
 from datetime import datetime, timedelta
 
 mlflow.set_tracking_uri("http://127.0.0.1:5555")
-mlflow.set_experiment("anz-rag-governance-poc")
+mlflow.set_experiment("rag-governance-poc")
 
 SAMPLE_QUERIES = [
     ("What are the eligibility criteria for a personal loan?",
-     "To be eligible for a personal loan at ANZ NZ, applicants must be 18 years or older and a New Zealand resident or citizen. Minimum annual income of NZD 30,000 (gross) is required, along with employment tenure of at least 6 months. Satisfactory credit history with no defaults in the last 24 months is also required. (Source: lending_policy.md, Section 1.1)"),
+     "To be eligible for a personal loan, applicants must be 18 years or older and a resident or citizen. Minimum annual income of 30,000 (gross) is required, along with employment tenure of at least 6 months. Satisfactory credit history with no defaults in the last 24 months is also required. (Source: lending_policy.md, Section 1.1)"),
     ("What is the maximum LVR for investment properties?",
      "The maximum Loan-to-Value Ratio (LVR) for investment properties is 65%. For owner-occupied properties, the standard maximum LVR is 80%, or up to 90% with lender's mortgage insurance. (Source: lending_policy.md, Section 2.2)"),
     ("How long must KYC records be retained?",
@@ -22,7 +22,7 @@ SAMPLE_QUERIES = [
     ("When is Enhanced Due Diligence required?",
      "Enhanced Due Diligence (EDD) must be applied when: the customer is a Politically Exposed Person (domestic or foreign), the customer is from a high-risk FATF jurisdiction, there are complex or unusual transaction patterns, for correspondent banking relationships, or when new technologies limit identity verification. (Source: kyc_policy.md, Section 2.3)"),
     ("What is the threshold for cash transaction reporting?",
-     "All cash transactions of NZD 10,000 or more (or equivalent in foreign currency) must be reported to the Financial Intelligence Unit (FIU) of the New Zealand Police. International wire transfers of NZD 1,000 or more must include originator information. (Source: kyc_policy.md, Section 3.2)"),
+     "All cash transactions of 10,000 or more (or equivalent in foreign currency) must be reported to the national Financial Intelligence Unit (FIU). International wire transfers of 1,000 or more must include originator information. (Source: kyc_policy.md, Section 3.2)"),
     ("How are AI models classified by risk tier?",
      "AI models are classified into four risk tiers: Tier 1 (Critical) requires Executive Risk Committee approval with quarterly review, Tier 2 (High) requires Model Risk Committee approval with semi-annual review, Tier 3 (Medium) requires Business Unit Risk Manager approval with annual review, and Tier 4 (Low) requires Model Owner approval with annual review. (Source: data_governance_policy.md, Section 3.3)"),
 ]
@@ -62,5 +62,5 @@ for i in range(20):
     result = mock_rag_query(query, answer, latency)
     print(f"  Trace {i+1}/20: '{query[:50]}...' (prompt={prompt_ver})")
 
-print(f"\nDone! 20 mock traces seeded into experiment 'anz-rag-governance-poc'")
+print(f"\nDone! 20 mock traces seeded into experiment 'rag-governance-poc'")
 print("MLflow UI: http://127.0.0.1:5555")

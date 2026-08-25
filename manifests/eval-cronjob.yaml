@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ${PROJECT_PREFIX}-eval-daily
+  namespace: ${NAMESPACE}
+  labels:
+    app: ${PROJECT_PREFIX}-eval
+    app.kubernetes.io/part-of: ${NAMESPACE}
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        app: ${PROJECT_PREFIX}-eval
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: ${PROJECT_PREFIX}-eval
+        spec:
+          serviceAccountName: ${SERVICE_ACCOUNT}
+          restartPolicy: Never
+          containers:
+            - name: eval
+              image: ${RAG_APP_IMAGE}
+              command: ["python", "eval_runner.py", "-p", "2"]
+              envFrom:
+                - configMapRef:
+                    name: ${CONFIGMAP_NAME}
+              env:
+                - name: LLM_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${SECRET_NAME}
+                      key: llm-api-key
+                      optional: true
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  cpu: "2"
+                  memory: 4Gi

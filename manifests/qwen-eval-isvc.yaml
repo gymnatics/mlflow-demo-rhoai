@@ -1,0 +1,55 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen35-9b-awq-eval
+  namespace: 0-models
+  annotations:
+    modelFormat: vLLM
+    opendatahub.io/connection-path: cyankiwi/Qwen3.5-9B-AWQ-INT8-INT4
+    opendatahub.io/connections: qwen35-9b-awq
+    opendatahub.io/hardware-profile-name: gpu-profile
+    opendatahub.io/hardware-profile-namespace: redhat-ods-applications
+    opendatahub.io/hardware-profile-resource-version: "56519"
+    opendatahub.io/model-type: generative
+    openshift.io/display-name: "Qwen3.5-9B-AWQ (Eval - No Thinking)"
+    security.opendatahub.io/enable-auth: "false"
+    serving.kserve.io/deploymentMode: Standard
+    serving.kserve.io/stop: "false"
+  labels:
+    networking.kserve.io/visibility: exposed
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    automountServiceAccountToken: false
+    deploymentStrategy:
+      type: RollingUpdate
+    maxReplicas: 1
+    minReplicas: 1
+    model:
+      args:
+      - --enable-prefix-caching
+      - --default-chat-template-kwargs={"enable_thinking":false}
+      modelFormat:
+        name: vLLM
+      name: ""
+      resources:
+        limits:
+          cpu: "4"
+          memory: 18Gi
+          nvidia.com/gpu: "1"
+        requests:
+          cpu: "2"
+          memory: 12Gi
+          nvidia.com/gpu: "1"
+      runtime: qwen35-9b-awq
+      storage:
+        key: qwen35-9b-awq
+        path: cyankiwi/Qwen3.5-9B-AWQ-INT8-INT4
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    serviceAccountName: qwen35-9b-awq-sa
+    timeout: 30
+    tolerations:
+    - effect: NoSchedule
+      key: nvidia.com/gpu
+      operator: Exists

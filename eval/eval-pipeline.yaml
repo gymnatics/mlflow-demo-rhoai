@@ -1,0 +1,695 @@
+# PIPELINE DEFINITION
+# Name: rag-evaluation
+# Description: Evaluate RAG pipeline traces, flag compliance violations, and compare with previous runs for drift detection
+# Inputs:
+#    experiment_name: str [Default: 'rag-governance-poc']
+#    llm_endpoint: str [Default: 'https://llm-endpoint.apps.cluster.example.com/v1']
+#    llm_judge_endpoint: str [Default: 'http://llm-judge.svc.cluster.local/v1']
+#    llm_model: str [Default: 'qwen35-9b-awq']
+#    lookback_hours: int [Default: 24.0]
+#    max_traces: int [Default: 10.0]
+#    mlflow_uri: str [Default: 'https://mlflow.apps.cluster.example.com/mlflow']
+#    mlflow_workspace: str [Default: 'gov-rag-poc']
+components:
+  comp-analyze-and-flag:
+    executorLabel: exec-analyze-and-flag
+    inputDefinitions:
+      artifacts:
+        eval_output:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+      parameters:
+        experiment_name:
+          parameterType: STRING
+        lookback_hours:
+          parameterType: NUMBER_INTEGER
+        mlflow_uri:
+          parameterType: STRING
+        mlflow_workspace:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        analysis_output:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-compare-and-report:
+    executorLabel: exec-compare-and-report
+    inputDefinitions:
+      artifacts:
+        analysis_output:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        eval_output:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+      parameters:
+        experiment_name:
+          parameterType: STRING
+        mlflow_uri:
+          parameterType: STRING
+        mlflow_workspace:
+          parameterType: STRING
+  comp-evaluate-traces:
+    executorLabel: exec-evaluate-traces
+    inputDefinitions:
+      parameters:
+        experiment_name:
+          parameterType: STRING
+        llm_endpoint:
+          parameterType: STRING
+        llm_judge_endpoint:
+          parameterType: STRING
+        llm_model:
+          parameterType: STRING
+        lookback_hours:
+          parameterType: NUMBER_INTEGER
+        max_traces:
+          parameterType: NUMBER_INTEGER
+        mlflow_uri:
+          parameterType: STRING
+        mlflow_workspace:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        eval_output:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-analyze-and-flag:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - analyze_and_flag
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.4'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef analyze_and_flag(\n    mlflow_uri: str,\n    mlflow_workspace:\
+          \ str,\n    experiment_name: str,\n    lookback_hours: int,\n    eval_output:\
+          \ dsl.Input[dsl.Artifact],\n    analysis_output: dsl.Output[dsl.Artifact],\n\
+          ):\n    \"\"\"Search assessed traces, flag violations, and compute trends.\"\
+          \"\"\n    import os\n    import json\n    import time\n\n    os.environ.setdefault(\"\
+          MLFLOW_TRACKING_INSECURE_TLS\", \"true\")\n    os.environ.setdefault(\"\
+          MLFLOW_TRACKING_AUTH\", \"kubernetes-namespaced\")\n\n    import mlflow\n\
+          \    mlflow.set_tracking_uri(mlflow_uri)\n    if mlflow_workspace:\n   \
+          \     mlflow.set_workspace(mlflow_workspace)\n\n    with open(eval_output.path)\
+          \ as f:\n        eval_data = json.load(f)\n\n    traces_evaluated = eval_data.get(\"\
+          traces_evaluated\", 0)\n    if traces_evaluated == 0:\n        print(\"\
+          No traces were evaluated. Skipping analysis.\")\n        result = {\n  \
+          \          \"flagged_traces\": [],\n            \"violation_counts\": {},\n\
+          \            \"violation_rates\": {},\n            \"trend_deltas\": {},\n\
+          \            \"current_period_total\": 0,\n            \"previous_period_total\"\
+          : 0,\n        }\n        with open(analysis_output.path, \"w\") as f:\n\
+          \            json.dump(result, f)\n        return\n\n    exp = mlflow.get_experiment_by_name(experiment_name)\n\
+          \    if exp is None:\n        print(f\"Experiment '{experiment_name}' not\
+          \ found.\")\n        result = {\"flagged_traces\": [], \"violation_counts\"\
+          : {}, \"violation_rates\": {}, \"trend_deltas\": {}, \"current_period_total\"\
+          : 0, \"previous_period_total\": 0}\n        with open(analysis_output.path,\
+          \ \"w\") as f:\n            json.dump(result, f)\n        return\n\n   \
+          \ now_ms = int(time.time() * 1000)\n    current_cutoff_ms = now_ms - lookback_hours\
+          \ * 3600 * 1000\n    previous_cutoff_ms = now_ms - 2 * lookback_hours *\
+          \ 3600 * 1000\n\n    def _search_traces(cutoff_ms, max_results=100):\n \
+          \       filter_str = (\n            f\"tags.`mlflow.traceName` RLIKE '(rag_query|eval_query)'\
+          \ \"\n            f\"AND timestamp_ms > {cutoff_ms}\"\n        )\n     \
+          \   return mlflow.search_traces(\n            experiment_ids=[exp.experiment_id],\n\
+          \            filter_string=filter_str,\n            max_results=max_results,\n\
+          \        )\n\n    current_traces = _search_traces(current_cutoff_ms)\n \
+          \   print(f\"Current period: {len(current_traces)} traces\")\n\n    flagged\
+          \ = []\n    violation_counts = {\n        \"not_grounded\": 0,\n       \
+          \ \"sla_breach\": 0,\n        \"no_policy_language\": 0,\n    }\n\n    for\
+          \ _, trace_row in current_traces.iterrows():\n        trace_id = trace_row.get(\"\
+          trace_id\", trace_row.get(\"request_id\", \"\"))\n        violations = []\n\
+          \n        assessments_list = trace_row.get(\"assessments\", []) or []\n\n\
+          \        attrs = {}\n        spans = trace_row.get(\"spans\", [])\n    \
+          \    if spans:\n            root_span = spans[0] if isinstance(spans, list)\
+          \ else None\n            if root_span and isinstance(root_span, dict):\n\
+          \                attrs = root_span.get(\"attributes\", {}) or {}\n\n   \
+          \     if not attrs:\n            try:\n                trace_obj = mlflow.MlflowClient().get_trace(trace_id)\n\
+          \                if trace_obj and trace_obj.data and trace_obj.data.spans:\n\
+          \                    root_span = trace_obj.data.spans[0]\n             \
+          \       attrs = dict(root_span.attributes) if root_span.attributes else\
+          \ {}\n            except Exception:\n                continue\n\n      \
+          \  sla_val = attrs.get(\"sla_pass\", \"\")\n        if str(sla_val).lower()\
+          \ == \"false\":\n            violations.append(\"sla_breach\")\n       \
+          \     violation_counts[\"sla_breach\"] += 1\n\n        for assessment in\
+          \ assessments_list:\n            if isinstance(assessment, dict):\n    \
+          \            name = assessment.get(\"assessment_name\", \"\")\n        \
+          \        fb = assessment.get(\"feedback\", {})\n                value =\
+          \ fb.get(\"value\", \"\") if isinstance(fb, dict) else \"\"\n          \
+          \  else:\n                name = getattr(assessment, \"name\", \"\")\n \
+          \               value = getattr(assessment, \"value\", None)\n         \
+          \       if hasattr(assessment, \"feedback\"):\n                    fb =\
+          \ assessment.feedback\n                    name = getattr(fb, \"name\",\
+          \ name)\n                    value = getattr(fb, \"value\", value)\n\n \
+          \           if name == \"groundedness\":\n                try:\n       \
+          \             faith_score = float(value)\n                    if faith_score\
+          \ < 0.6:\n                        violations.append(\"not_grounded\")\n\
+          \                        violation_counts[\"not_grounded\"] += 1\n     \
+          \           except (ValueError, TypeError):\n                    if str(value)\
+          \ == \"not_grounded\":\n                        violations.append(\"not_grounded\"\
+          )\n                        violation_counts[\"not_grounded\"] += 1\n   \
+          \         elif name == \"policy_language\" and str(value) == \"no\":\n \
+          \               violations.append(\"no_policy_language\")\n            \
+          \    violation_counts[\"no_policy_language\"] += 1\n\n        if violations:\n\
+          \            ts_ms = trace_row.get(\"request_time\", 0)\n            try:\n\
+          \                ts_ms = int(ts_ms) if ts_ms else 0\n            except\
+          \ (ValueError, TypeError):\n                ts_ms = 0\n            flagged.append({\n\
+          \                \"trace_id\": trace_id,\n                \"timestamp_ms\"\
+          : ts_ms,\n                \"violations\": violations,\n                \"\
+          severity\": \"high\" if \"not_grounded\" in violations else \"medium\",\n\
+          \            })\n\n    current_total = len(current_traces)\n    violation_rates\
+          \ = {}\n    for k, v in violation_counts.items():\n        violation_rates[k]\
+          \ = round(v / current_total, 3) if current_total > 0 else 0.0\n\n    previous_traces\
+          \ = _search_traces(previous_cutoff_ms)\n    prev_in_window = previous_traces[\n\
+          \        previous_traces.get(\"timestamp_ms\", 0) < current_cutoff_ms\n\
+          \    ] if not previous_traces.empty and \"timestamp_ms\" in previous_traces.columns\
+          \ else previous_traces\n    previous_total = len(prev_in_window)\n\n   \
+          \ trend_deltas = {}\n    if previous_total > 0 and current_total > 0:\n\
+          \        trend_deltas[\"volume_change_pct\"] = round(\n            (current_total\
+          \ - previous_total) / previous_total * 100, 1\n        )\n    else:\n  \
+          \      trend_deltas[\"volume_change_pct\"] = 0.0\n\n    print(f\"Flagged\
+          \ {len(flagged)} traces with violations.\")\n    print(f\"Violation counts:\
+          \ {violation_counts}\")\n    print(f\"Violation rates: {violation_rates}\"\
+          )\n\n    result = {\n        \"flagged_traces\": flagged,\n        \"violation_counts\"\
+          : violation_counts,\n        \"violation_rates\": violation_rates,\n   \
+          \     \"trend_deltas\": trend_deltas,\n        \"current_period_total\"\
+          : current_total,\n        \"previous_period_total\": previous_total,\n \
+          \   }\n\n    with open(analysis_output.path, \"w\") as f:\n        json.dump(result,\
+          \ f, indent=2)\n\n    print(\"Analysis complete.\")\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/gov-rag-poc/gov-rag-app:latest
+    exec-compare-and-report:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - compare_and_report
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.4'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef compare_and_report(\n    mlflow_uri: str,\n    mlflow_workspace:\
+          \ str,\n    experiment_name: str,\n    eval_output: dsl.Input[dsl.Artifact],\n\
+          \    analysis_output: dsl.Input[dsl.Artifact],\n):\n    \"\"\"Compare with\
+          \ previous run, incorporate flagged data, and log summary report.\"\"\"\n\
+          \    import os\n    import json\n    from datetime import datetime\n\n \
+          \   os.environ.setdefault(\"MLFLOW_TRACKING_INSECURE_TLS\", \"true\")\n\
+          \    os.environ.setdefault(\"MLFLOW_TRACKING_AUTH\", \"kubernetes-namespaced\"\
+          )\n\n    import mlflow\n    mlflow.set_tracking_uri(mlflow_uri)\n    if\
+          \ mlflow_workspace:\n        mlflow.set_workspace(mlflow_workspace)\n\n\
+          \    with open(eval_output.path) as f:\n        current = json.load(f)\n\
+          \    with open(analysis_output.path) as f:\n        analysis = json.load(f)\n\
+          \n    traces_evaluated = current.get(\"traces_evaluated\", 0)\n    current_metrics\
+          \ = current.get(\"metrics\", {})\n    prompt_version = current.get(\"prompt_version\"\
+          , \"unknown\")\n    model_name = current.get(\"model_name\", \"unknown\"\
+          )\n\n    if traces_evaluated == 0:\n        print(\"No traces were evaluated.\
+          \ Skipping comparison.\")\n        return\n\n    flagged_traces = analysis.get(\"\
+          flagged_traces\", [])\n    violation_counts = analysis.get(\"violation_counts\"\
+          , {})\n    violation_rates = analysis.get(\"violation_rates\", {})\n   \
+          \ trend_deltas = analysis.get(\"trend_deltas\", {})\n\n    client = mlflow.MlflowClient()\n\
+          \    exp = client.get_experiment_by_name(experiment_name)\n    if exp is\
+          \ None:\n        print(f\"Experiment '{experiment_name}' not found.\")\n\
+          \        return\n\n    runs = client.search_runs(\n        experiment_ids=[exp.experiment_id],\n\
+          \        order_by=[\"start_time DESC\"],\n        max_results=5,\n    )\n\
+          \n    previous_metrics = {}\n    prev_run_name = \"none\"\n    if len(runs)\
+          \ >= 2:\n        prev_run = runs[1]\n        previous_metrics = prev_run.data.metrics\n\
+          \        prev_run_name = prev_run.info.run_name or prev_run.info.run_id[:12]\n\
+          \n    report_lines = [\n        \"# RAG Evaluation Comparison Report\",\n\
+          \        f\"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\"\
+          ,\n        \"\",\n        \"## Current Evaluation\",\n        f\"- Traces\
+          \ evaluated: {traces_evaluated}\",\n    ]\n\n    for k, v in sorted(current_metrics.items()):\n\
+          \        report_lines.append(f\"- {k}: {v:.3f}\")\n\n    report_lines.extend([\n\
+          \        \"\",\n        \"## Compliance Analysis\",\n        f\"- Flagged\
+          \ traces: {len(flagged_traces)}\",\n    ])\n    for k, v in sorted(violation_counts.items()):\n\
+          \        rate = violation_rates.get(k, 0)\n        report_lines.append(f\"\
+          - {k}: {v} ({rate:.1%})\")\n\n    if trend_deltas:\n        report_lines.extend([\"\
+          \", \"## Trends vs Previous Period\"])\n        for k, v in sorted(trend_deltas.items()):\n\
+          \            report_lines.append(f\"- {k}: {v:+.1f}%\")\n\n    report_lines.extend([\"\
+          \", \"## Comparison with Previous Run\"])\n    if previous_metrics:\n  \
+          \      report_lines.append(f\"Previous run: {prev_run_name}\")\n       \
+          \ report_lines.append(\"\")\n        report_lines.append(\"| Metric | Current\
+          \ | Previous | Delta |\")\n        report_lines.append(\"|--------|---------|----------|-------|\"\
+          )\n\n        regressions = []\n        for key in sorted(set(list(current_metrics.keys())\
+          \ + list(previous_metrics.keys()))):\n            curr_val = current_metrics.get(key,\
+          \ 0)\n            prev_val = previous_metrics.get(key, 0)\n            delta\
+          \ = curr_val - prev_val\n            delta_str = f\"{delta:+.3f}\"\n   \
+          \         report_lines.append(f\"| {key} | {curr_val:.3f} | {prev_val:.3f}\
+          \ | {delta_str} |\")\n            if \"mean\" in key and delta < -0.1:\n\
+          \                regressions.append(key)\n\n        report_lines.extend([\"\
+          \", \"## Regression Check\"])\n        if regressions:\n            report_lines.append(f\"\
+          **REGRESSION DETECTED** in: {', '.join(regressions)}\")\n            report_lines.append(\"\
+          Action: Review prompt and retrieval changes before production deployment.\"\
+          )\n        else:\n            report_lines.append(\"No significant regressions\
+          \ detected. Safe to proceed.\")\n    else:\n        report_lines.append(\"\
+          No previous evaluation run found for comparison.\")\n        report_lines.append(\"\
+          This is the baseline run.\")\n\n    report_text = \"\\n\".join(report_lines)\n\
+          \    print(report_text)\n\n    mlflow.set_experiment(experiment_name)\n\
+          \    with mlflow.start_run(run_name=f\"eval-comparison-{int(datetime.now().timestamp())}\"\
+          ):\n        mlflow.set_tag(\"report_type\", \"comparison\")\n        mlflow.set_tag(\"\
+          prompt_version\", prompt_version)\n        mlflow.set_tag(\"model_name\"\
+          , model_name)\n        mlflow.set_tag(\"num_questions\", str(traces_evaluated))\n\
+          \        mlflow.set_tag(\"traces_evaluated\", str(traces_evaluated))\n \
+          \       mlflow.set_tag(\"flagged_count\", str(len(flagged_traces)))\n  \
+          \      for k, v in current_metrics.items():\n            mlflow.log_metric(k,\
+          \ v)\n        for k, v in violation_counts.items():\n            mlflow.log_metric(f\"\
+          violations_{k}\", v)\n        for k, v in violation_rates.items():\n   \
+          \         mlflow.log_metric(f\"rate_{k}\", v)\n        mlflow.log_text(report_text,\
+          \ \"comparison_report.md\")\n        mlflow.log_text(json.dumps(flagged_traces,\
+          \ indent=2), \"flagged_traces.json\")\n        mlflow.log_text(json.dumps(analysis,\
+          \ indent=2), \"analysis_summary.json\")\n\n    print(\"Comparison report\
+          \ and flagged traces logged to MLflow.\")\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/gov-rag-poc/gov-rag-app:latest
+    exec-evaluate-traces:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_traces
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.4'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_traces(\n    mlflow_uri: str,\n    mlflow_workspace:\
+          \ str,\n    experiment_name: str,\n    llm_endpoint: str,\n    llm_judge_endpoint:\
+          \ str,\n    llm_model: str,\n    max_traces: int,\n    lookback_hours: int,\n\
+          \    eval_output: dsl.Output[dsl.Artifact],\n):\n    \"\"\"Score recent\
+          \ traces with RAGAS metrics (faithfulness, answer_relevancy) and MLflow\
+          \ code-based scorers.\"\"\"\n    import os\n    import json\n    import\
+          \ time\n\n    os.environ.setdefault(\"MLFLOW_TRACKING_INSECURE_TLS\", \"\
+          true\")\n    os.environ.setdefault(\"MLFLOW_TRACKING_AUTH\", \"kubernetes-namespaced\"\
+          )\n    os.environ.setdefault(\"OPENAI_API_KEY\", os.environ.get(\"LLM_API_KEY\"\
+          , \"unused\"))\n    os.environ.setdefault(\"OPENAI_TIMEOUT\", \"120\")\n\
+          \n    import mlflow\n    from mlflow.genai.scorers import scorer\n    from\
+          \ mlflow.entities import Feedback\n\n    mlflow.set_tracking_uri(mlflow_uri)\n\
+          \    if mlflow_workspace:\n        mlflow.set_workspace(mlflow_workspace)\n\
+          \n    @scorer\n    def policy_language_check(inputs, outputs, trace):\n\
+          \        response_text = outputs if isinstance(outputs, str) else str(outputs)\n\
+          \        default_terms = \"policy,section,lvr,kyc,aml,cdd,compliance,regulatory,retention\"\
+          \n        terms = os.environ.get(\"POLICY_TERMS\", default_terms).split(\"\
+          ,\")\n        found = [t for t in terms if t in response_text.lower()]\n\
+          \        return Feedback(\n            name=\"policy_language\", value=\"\
+          yes\" if found else \"no\",\n            rationale=f\"Found: {', '.join(found)}\"\
+          \ if found else \"No policy terms found.\",\n        )\n\n    @scorer\n\
+          \    def latency_sla_check(inputs, outputs, trace):\n        if trace and\
+          \ trace.info and trace.info.execution_time_ms is not None:\n           \
+          \ ok = trace.info.execution_time_ms < 10_000\n            return Feedback(\n\
+          \                name=\"latency_sla\", value=\"pass\" if ok else \"fail\"\
+          ,\n                rationale=f\"{trace.info.execution_time_ms}ms ({'within'\
+          \ if ok else 'exceeds'} 10s SLA).\",\n            )\n        return Feedback(name=\"\
+          latency_sla\", value=\"unknown\", rationale=\"No timing data.\")\n\n   \
+          \ exp = mlflow.get_experiment_by_name(experiment_name)\n    if exp is None:\n\
+          \        print(f\"Experiment '{experiment_name}' not found.\")\n       \
+          \ output = {\"traces_evaluated\": 0, \"eval_run_id\": \"\", \"metrics\"\
+          : {}}\n        with open(eval_output.path, \"w\") as f:\n            json.dump(output,\
+          \ f)\n        return\n\n    cutoff_ms = int((time.time() - lookback_hours\
+          \ * 3600) * 1000)\n    filter_str = (\n        f\"tags.`mlflow.traceName`\
+          \ RLIKE '(rag_query|eval_query)' \"\n        f\"AND timestamp_ms > {cutoff_ms}\"\
+          \n    )\n    print(f\"Filter: {filter_str}\")\n\n    traces = mlflow.search_traces(\n\
+          \        experiment_ids=[exp.experiment_id],\n        filter_string=filter_str,\n\
+          \        max_results=max_traces,\n    )\n\n    if traces.empty:\n      \
+          \  print(\"No traces found to evaluate.\")\n        output = {\"traces_evaluated\"\
+          : 0, \"eval_run_id\": \"\", \"metrics\": {}}\n        with open(eval_output.path,\
+          \ \"w\") as f:\n            json.dump(output, f)\n        return\n\n   \
+          \ # Filter out traces that already have a groundedness assessment\n    def\
+          \ _has_groundedness(row):\n        for a in (row.get(\"assessments\", [])\
+          \ or []):\n            name = \"\"\n            if isinstance(a, dict):\n\
+          \                name = a.get(\"assessment_name\", a.get(\"name\", \"\"\
+          ))\n            else:\n                name = getattr(a, \"name\", \"\"\
+          )\n                if hasattr(a, \"feedback\"):\n                    name\
+          \ = getattr(a.feedback, \"name\", name)\n            if name == \"groundedness\"\
+          :\n                return True\n        return False\n\n    already_assessed\
+          \ = traces.apply(_has_groundedness, axis=1)\n    traces = traces[~already_assessed]\n\
+          \    if traces.empty:\n        print(\"All traces already assessed. Nothing\
+          \ new to evaluate.\")\n        output = {\"traces_evaluated\": 0, \"eval_run_id\"\
+          : \"\", \"metrics\": {}}\n        with open(eval_output.path, \"w\") as\
+          \ f:\n            json.dump(output, f)\n        return\n    print(f\"Skipped\
+          \ {already_assessed.sum()} already-assessed traces.\")\n\n    num_traces\
+          \ = len(traces)\n    print(f\"Found {num_traces} traces. Running scorers...\"\
+          )\n\n    mlflow.set_experiment(experiment_name)\n\n    # Phase A: MLflow\
+          \ code-based scorers (no LLM calls)\n    mlflow.genai.evaluate(\n      \
+          \  data=traces,\n        scorers=[policy_language_check, latency_sla_check],\n\
+          \    )\n    print(\"Phase A complete: policy_language and latency_sla scored.\"\
+          )\n\n    eval_run_id = f\"pipeline-eval-{int(time.time())}\"\n\n    # Phase\
+          \ B: RAGAS metrics via EvalHub\n    from evalhub import SyncEvalHubClient,\
+          \ JobSubmissionRequest, ModelConfig, BenchmarkConfig\n    from evalhub.models.api\
+          \ import TestDataRef, S3TestDataRef\n\n    def _extract_trace_fields(trace_row):\n\
+          \        \"\"\"Extract user_input, response, and retrieved_contexts from\
+          \ a trace row.\"\"\"\n        request_data = trace_row.get(\"request\",\
+          \ {})\n        response_data = trace_row.get(\"response\", {})\n\n     \
+          \   if isinstance(request_data, dict):\n            user_input = request_data.get(\"\
+          user_question\", str(request_data))\n        elif request_data is not None:\n\
+          \            user_input = str(request_data)\n        else:\n           \
+          \ user_input = \"\"\n\n        if isinstance(response_data, dict):\n   \
+          \         response = response_data.get(\"answer\", str(response_data))\n\
+          \        elif response_data is not None:\n            response = str(response_data)\n\
+          \        else:\n            response = \"\"\n\n        contexts = []\n \
+          \       if isinstance(response_data, dict):\n            chunks = response_data.get(\"\
+          context_chunks\", [])\n            if isinstance(chunks, list):\n      \
+          \          for c in chunks:\n                    if isinstance(c, dict):\n\
+          \                        contexts.append(str(c.get(\"content\", \"\"))[:1000])\n\
+          \n        if not contexts:\n            spans = trace_row.get(\"spans\"\
+          , [])\n            if spans:\n                for span in (spans if isinstance(spans,\
+          \ list) else []):\n                    sname = span.get(\"name\", \"\")\
+          \ if isinstance(span, dict) else getattr(span, \"name\", \"\")\n       \
+          \             if \"retrieve\" in sname.lower():\n                      \
+          \  span_outputs = span.get(\"outputs\", None) if isinstance(span, dict)\
+          \ else getattr(span, \"outputs\", None)\n                        if isinstance(span_outputs,\
+          \ list):\n                            for item in span_outputs:\n      \
+          \                          if isinstance(item, dict):\n                \
+          \                    contexts.append(str(item.get(\"content\", item.get(\"\
+          page_content\", \"\")))[:1000])\n                                else:\n\
+          \                                    contexts.append(str(item)[:1000])\n\
+          \                        elif span_outputs:\n                          \
+          \  contexts.append(str(span_outputs)[:2000])\n                        break\n\
+          \n        if not contexts:\n            contexts = [\"No context retrieved.\"\
+          ]\n\n        return user_input, response, contexts\n\n    samples = []\n\
+          \    trace_ids = []\n    for _, trace_row in traces.iterrows():\n      \
+          \  user_input, response, contexts = _extract_trace_fields(trace_row)\n \
+          \       if not user_input or not response:\n            continue\n     \
+          \   samples.append({\n            \"user_input\": user_input,\n        \
+          \    \"response\": response,\n            \"retrieved_contexts\": contexts,\n\
+          \        })\n        trace_ids.append(trace_row.get(\"trace_id\", \"\"))\n\
+          \n    ragas_scores = {\"faithfulness\": [], \"answer_relevancy\": []}\n\n\
+          \    if samples:\n        import tempfile\n        import boto3\n\n    \
+          \    dataset_path = os.path.join(tempfile.mkdtemp(), \"ragas_dataset.jsonl\"\
+          )\n        with open(dataset_path, \"w\") as df:\n            for s in samples:\n\
+          \                df.write(json.dumps(s) + \"\\n\")\n\n        s3 = boto3.client(\n\
+          \            \"s3\",\n            endpoint_url=os.environ.get(\"S3_ENDPOINT_URL\"\
+          , \"http://minio.gov-rag-poc.svc:9000\"),\n            aws_access_key_id=os.environ.get(\"\
+          AWS_ACCESS_KEY_ID\", \"minio\"),\n            aws_secret_access_key=os.environ.get(\"\
+          AWS_SECRET_ACCESS_KEY\", \"minio123\"),\n        )\n        bucket = \"\
+          evalhub-data\"\n        try:\n            s3.create_bucket(Bucket=bucket)\n\
+          \        except Exception:\n            pass\n        s3_key = f\"ragas-eval/{eval_run_id}.jsonl\"\
+          \n        s3.upload_file(dataset_path, bucket, s3_key)\n        s3_uri =\
+          \ f\"s3://{bucket}/{s3_key}\"\n        print(f\"Uploaded {len(samples)}\
+          \ samples to {s3_uri}\")\n\n        evalhub_url = os.environ.get(\n    \
+          \        \"EVALHUB_URL\", \"https://evalhub.redhat-ods-applications.svc:8443\"\
+          \n        )\n        evalhub_tenant = os.environ.get(\"EVALHUB_TENANT\"\
+          , os.environ.get(\"NAMESPACE\", \"gov-rag-poc\"))\n\n        judge_url =\
+          \ llm_judge_endpoint.rstrip(\"/\")\n        if not judge_url.endswith(\"\
+          /v1\"):\n            judge_url += \"/v1\"\n\n        try:\n            sa_token_path\
+          \ = \"/var/run/secrets/kubernetes.io/serviceaccount/token\"\n          \
+          \  with SyncEvalHubClient(\n                base_url=evalhub_url,\n    \
+          \            tenant=evalhub_tenant,\n                verify_ssl=False,\n\
+          \                auth_token_path=sa_token_path if os.path.exists(sa_token_path)\
+          \ else None,\n            ) as eh_client:\n                s3_secret = os.environ.get(\"\
+          EVALHUB_S3_SECRET\", \"pipelines-s3-credentials\")\n                job\
+          \ = eh_client.jobs.submit(JobSubmissionRequest(\n                    name=f\"\
+          ragas-eval-{eval_run_id}\",\n                    model=ModelConfig(url=judge_url,\
+          \ name=llm_model),\n                    benchmarks=[BenchmarkConfig(\n \
+          \                       id=\"ragas_rag_default\",\n                    \
+          \    provider_id=\"ragas\",\n                        parameters={\n    \
+          \                        \"metrics\": [\"faithfulness\"],\n            \
+          \                \"max_tokens\": 4096,\n                            \"temperature\"\
+          : 0.1,\n                        },\n                        test_data_ref=TestDataRef(s3=S3TestDataRef(\n\
+          \                            bucket=bucket,\n                          \
+          \  key=s3_key,\n                            secret_ref=s3_secret,\n    \
+          \                    )),\n                    )],\n                ))\n\
+          \                job_resource = job.resource\n                job_id = job_resource.id\
+          \ if hasattr(job_resource, \"id\") else str(job_resource)\n            \
+          \    print(f\"EvalHub RAGAS job submitted: {job_id}\")\n\n             \
+          \   result = eh_client.jobs.wait_for_completion(job_id, timeout=1200)\n\
+          \                job_status = result.status.state if hasattr(result.status,\
+          \ \"state\") else result.status\n                print(f\"EvalHub RAGAS\
+          \ job status: {job_status}\")\n\n                if str(job_status) == \"\
+          completed\" or str(job_status) == \"JobStatus.COMPLETED\":\n           \
+          \         aggregate_metrics = {}\n                    bench_list = result.results\n\
+          \                    if hasattr(result.results, \"benchmarks\"):\n     \
+          \                   bench_list = result.results.benchmarks or []\n     \
+          \               elif not isinstance(result.results, list):\n           \
+          \             bench_list = []\n                    for bench_result in bench_list:\n\
+          \                        if hasattr(bench_result, \"metrics\") and bench_result.metrics:\n\
+          \                            if isinstance(bench_result.metrics, dict):\n\
+          \                                aggregate_metrics = bench_result.metrics\n\
+          \                            else:\n                                for\
+          \ m in bench_result.metrics:\n                                    if isinstance(m,\
+          \ dict):\n                                        aggregate_metrics[m.get(\"\
+          name\", \"\")] = m.get(\"score\", 0.0)\n                               \
+          \     else:\n                                        aggregate_metrics[getattr(m,\
+          \ \"name\", \"\")] = getattr(m, \"score\", 0.0)\n                      \
+          \      break\n\n                    avg_faith = float(aggregate_metrics.get(\"\
+          faithfulness\", 0.0) or 0.0)\n                    avg_relevancy = float(aggregate_metrics.get(\"\
+          answer_relevancy\", 0.0) or 0.0)\n                    print(f\"EvalHub aggregate\
+          \ metrics: faithfulness={avg_faith:.4f}, answer_relevancy={avg_relevancy:.4f}\"\
+          )\n\n                    from mlflow.entities import Assessment, AssessmentSource\n\
+          \                    from mlflow.entities.assessment import FeedbackValue\n\
+          \n                    for i, trace_id in enumerate(trace_ids):\n       \
+          \                 faith = avg_faith\n                        relevancy =\
+          \ avg_relevancy\n\n                        ragas_scores[\"faithfulness\"\
+          ].append(faith)\n                        ragas_scores[\"answer_relevancy\"\
+          ].append(relevancy)\n\n                        mlflow.log_assessment(\n\
+          \                            trace_id=trace_id,\n                      \
+          \      assessment=Assessment(\n                                name=\"groundedness\"\
+          ,\n                                source=AssessmentSource(\n          \
+          \                          source_type=\"LLM_JUDGE\", source_id=\"evalhub-ragas\"\
+          \n                                ),\n                                feedback=FeedbackValue(value=round(faith,\
+          \ 4)),\n                                rationale=f\"EvalHub RAGAS faithfulness={faith:.4f},\
+          \ answer_relevancy={relevancy:.4f}\",\n                            ),\n\
+          \                        )\n                    print(f\"EvalHub RAGAS job\
+          \ completed. Logged scores for {len(trace_ids)} traces.\")\n           \
+          \     else:\n                    print(f\"EvalHub RAGAS job ended with status:\
+          \ {job_status}\")\n\n        except Exception as e:\n            print(f\"\
+          EvalHub RAGAS evaluation failed: {e}\")\n            if hasattr(e, \"response\"\
+          ):\n                print(f\"Response status: {e.response.status_code}\"\
+          )\n                print(f\"Response body: {e.response.text}\")\n      \
+          \      import traceback\n            traceback.print_exc()\n    else:\n\
+          \        print(\"No valid samples for RAGAS evaluation.\")\n\n    print(\"\
+          Phase B complete: RAGAS metrics scored via EvalHub.\")\n\n    # Aggregate\
+          \ metrics\n    avg_faithfulness = sum(ragas_scores[\"faithfulness\"]) /\
+          \ len(ragas_scores[\"faithfulness\"]) if ragas_scores[\"faithfulness\"]\
+          \ else 0.0\n    avg_answer_relevancy = sum(ragas_scores[\"answer_relevancy\"\
+          ]) / len(ragas_scores[\"answer_relevancy\"]) if ragas_scores[\"answer_relevancy\"\
+          ] else 0.0\n    hallucination_rate = 1.0 - avg_faithfulness\n\n    # Re-read\
+          \ traces for code-based scorer aggregation\n    scored_traces = mlflow.search_traces(\n\
+          \        experiment_ids=[exp.experiment_id],\n        filter_string=filter_str,\n\
+          \        max_results=max_traces,\n    )\n\n    relevance_values = []\n \
+          \   latency_values = []\n    policy_yes = 0\n    total_assessed = 0\n\n\
+          \    for _, trace_row in scored_traces.iterrows():\n        assessments_list\
+          \ = trace_row.get(\"assessments\", []) or []\n        for assessment in\
+          \ assessments_list:\n            if isinstance(assessment, dict):\n    \
+          \            name = assessment.get(\"assessment_name\", \"\")\n        \
+          \        fb = assessment.get(\"feedback\", {})\n                value =\
+          \ fb.get(\"value\", \"\") if isinstance(fb, dict) else \"\"\n          \
+          \  else:\n                name = getattr(assessment, \"name\", \"\")\n \
+          \               value = getattr(assessment, \"value\", \"\")\n\n       \
+          \     if name == \"relevance\":\n                relevance_values.append(1.0\
+          \ if str(value).lower() in (\"yes\", \"true\") else 0.0)\n            elif\
+          \ name == \"policy_language\":\n                if value == \"yes\":\n \
+          \                   policy_yes += 1\n                total_assessed += 1\n\
+          \n        exec_dur = trace_row.get(\"execution_duration\", None)\n     \
+          \   if exec_dur:\n            try:\n                latency_values.append(float(exec_dur)\
+          \ / 1000.0)\n            except (ValueError, TypeError):\n             \
+          \   pass\n\n    avg_relevance = sum(relevance_values) / len(relevance_values)\
+          \ if relevance_values else 0.0\n    source_accuracy = policy_yes / total_assessed\
+          \ if total_assessed > 0 else 0.0\n    avg_latency = sum(latency_values)\
+          \ / len(latency_values) if latency_values else 0.0\n\n    prompt_version\
+          \ = \"unknown\"\n    model_name = llm_model\n    for _, trace_row in scored_traces.head(1).iterrows():\n\
+          \        spans = trace_row.get(\"spans\", [])\n        if spans:\n     \
+          \       root_span = spans[0] if isinstance(spans, list) else None\n    \
+          \        if root_span and isinstance(root_span, dict):\n               \
+          \ attrs = root_span.get(\"attributes\", {}) or {}\n                prompt_version\
+          \ = attrs.get(\"prompt_version\", \"unknown\")\n                model_name\
+          \ = attrs.get(\"model_name\", llm_model)\n\n    mlflow.set_experiment(experiment_name)\n\
+          \    with mlflow.start_run(run_name=f\"eval-{eval_run_id}\"):\n        mlflow.set_tag(\"\
+          prompt_version\", prompt_version)\n        mlflow.set_tag(\"model_name\"\
+          , model_name)\n        mlflow.set_tag(\"num_questions\", str(num_traces))\n\
+          \        mlflow.set_tag(\"eval_run_id\", eval_run_id)\n        mlflow.set_tag(\"\
+          eval_type\", \"ragas\")\n        mlflow.log_metric(\"avg_groundedness\"\
+          , round(avg_faithfulness, 4))\n        mlflow.log_metric(\"avg_faithfulness\"\
+          , round(avg_faithfulness, 4))\n        mlflow.log_metric(\"avg_answer_relevancy\"\
+          , round(avg_answer_relevancy, 4))\n        mlflow.log_metric(\"avg_relevance\"\
+          , round(avg_relevance, 4))\n        mlflow.log_metric(\"hallucination_rate\"\
+          , round(hallucination_rate, 4))\n        mlflow.log_metric(\"source_accuracy\"\
+          , round(source_accuracy, 4))\n        mlflow.log_metric(\"avg_latency\"\
+          , round(avg_latency, 4))\n        mlflow.log_text(json.dumps({\n       \
+          \     \"eval_run_id\": eval_run_id,\n            \"traces_evaluated\": num_traces,\n\
+          \            \"metrics\": {\n                \"avg_faithfulness\": avg_faithfulness,\n\
+          \                \"avg_answer_relevancy\": avg_answer_relevancy,\n     \
+          \           \"avg_relevance\": avg_relevance,\n                \"hallucination_rate\"\
+          : hallucination_rate,\n                \"source_accuracy\": source_accuracy,\n\
+          \                \"avg_latency\": avg_latency,\n            },\n       \
+          \ }, indent=2), \"eval_results.json\")\n\n    output = {\n        \"traces_evaluated\"\
+          : num_traces,\n        \"eval_run_id\": eval_run_id,\n        \"prompt_version\"\
+          : prompt_version,\n        \"model_name\": model_name,\n        \"metrics\"\
+          : {\n            \"avg_groundedness\": round(avg_faithfulness, 4),\n   \
+          \         \"avg_faithfulness\": round(avg_faithfulness, 4),\n          \
+          \  \"avg_answer_relevancy\": round(avg_answer_relevancy, 4),\n         \
+          \   \"avg_relevance\": round(avg_relevance, 4),\n            \"hallucination_rate\"\
+          : round(hallucination_rate, 4),\n            \"source_accuracy\": round(source_accuracy,\
+          \ 4),\n            \"avg_latency\": round(avg_latency, 4),\n        },\n\
+          \    }\n\n    print(f\"Evaluation complete: {num_traces} traces scored.\"\
+          )\n    print(f\"RAGAS: faithfulness={avg_faithfulness:.3f}, answer_relevancy={avg_answer_relevancy:.3f}\"\
+          )\n    print(f\"Code-based: hallucination_rate={hallucination_rate:.3f},\
+          \ source_accuracy={source_accuracy:.3f}\")\n\n    with open(eval_output.path,\
+          \ \"w\") as f:\n        json.dump(output, f)\n\n"
+        image: image-registry.openshift-image-registry.svc:5000/gov-rag-poc/gov-rag-app:latest
+pipelineInfo:
+  description: Evaluate RAG pipeline traces, flag compliance violations, and compare
+    with previous runs for drift detection
+  name: rag-evaluation
+root:
+  dag:
+    tasks:
+      analyze-and-flag:
+        cachingOptions: {}
+        componentRef:
+          name: comp-analyze-and-flag
+        dependentTasks:
+        - evaluate-traces
+        inputs:
+          artifacts:
+            eval_output:
+              taskOutputArtifact:
+                outputArtifactKey: eval_output
+                producerTask: evaluate-traces
+          parameters:
+            experiment_name:
+              componentInputParameter: experiment_name
+            lookback_hours:
+              componentInputParameter: lookback_hours
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+            mlflow_workspace:
+              componentInputParameter: mlflow_workspace
+        taskInfo:
+          name: analyze-and-flag
+      compare-and-report:
+        cachingOptions: {}
+        componentRef:
+          name: comp-compare-and-report
+        dependentTasks:
+        - analyze-and-flag
+        - evaluate-traces
+        inputs:
+          artifacts:
+            analysis_output:
+              taskOutputArtifact:
+                outputArtifactKey: analysis_output
+                producerTask: analyze-and-flag
+            eval_output:
+              taskOutputArtifact:
+                outputArtifactKey: eval_output
+                producerTask: evaluate-traces
+          parameters:
+            experiment_name:
+              componentInputParameter: experiment_name
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+            mlflow_workspace:
+              componentInputParameter: mlflow_workspace
+        taskInfo:
+          name: compare-and-report
+      evaluate-traces:
+        cachingOptions: {}
+        componentRef:
+          name: comp-evaluate-traces
+        inputs:
+          parameters:
+            experiment_name:
+              componentInputParameter: experiment_name
+            llm_endpoint:
+              componentInputParameter: llm_endpoint
+            llm_judge_endpoint:
+              componentInputParameter: llm_judge_endpoint
+            llm_model:
+              componentInputParameter: llm_model
+            lookback_hours:
+              componentInputParameter: lookback_hours
+            max_traces:
+              componentInputParameter: max_traces
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+            mlflow_workspace:
+              componentInputParameter: mlflow_workspace
+        taskInfo:
+          name: evaluate-traces
+  inputDefinitions:
+    parameters:
+      experiment_name:
+        defaultValue: rag-governance-poc
+        isOptional: true
+        parameterType: STRING
+      llm_endpoint:
+        defaultValue: https://llm-endpoint.apps.cluster.example.com/v1
+        isOptional: true
+        parameterType: STRING
+      llm_judge_endpoint:
+        defaultValue: http://llm-judge.svc.cluster.local/v1
+        isOptional: true
+        parameterType: STRING
+      llm_model:
+        defaultValue: qwen35-9b-awq
+        isOptional: true
+        parameterType: STRING
+      lookback_hours:
+        defaultValue: 24.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      max_traces:
+        defaultValue: 10.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      mlflow_uri:
+        defaultValue: https://mlflow.apps.cluster.example.com/mlflow
+        isOptional: true
+        parameterType: STRING
+      mlflow_workspace:
+        defaultValue: gov-rag-poc
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.14.4

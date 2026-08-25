@@ -1,6 +1,6 @@
-# ANZ Banking Policy Assistant
+# Policy Compliance Assistant
 
-Welcome to the **ANZ NZ Governance POC** -- a RAG-powered banking policy assistant with full MLflow tracing.
+Welcome to the **RAG Governance POC** -- a RAG-powered policy compliance assistant with full MLflow tracing.
 
 ## What This Demonstrates
 
@@ -9,7 +9,7 @@ Welcome to the **ANZ NZ Governance POC** -- a RAG-powered banking policy assista
 
 ## How to Use
 
-Ask questions about ANZ banking policies, for example:
+Ask questions about the indexed policy documents, for example:
 
 - "What are the eligibility criteria for a personal loan?"
 - "What is the maximum LVR for investment properties?"

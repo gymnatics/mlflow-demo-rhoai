@@ -2,15 +2,15 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: anz-poc-agent
+  name: ${SERVICE_ACCOUNT}
   namespace: ${NAMESPACE}
   labels:
-    app.kubernetes.io/part-of: anz-governance-poc
+    app.kubernetes.io/part-of: ${NAMESPACE}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: anz-poc-mlflow-access
+  name: ${SERVICE_ACCOUNT}-mlflow-access
   namespace: ${NAMESPACE}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -18,5 +18,60 @@ roleRef:
   name: mlflow-operator-mlflow-integration
 subjects:
   - kind: ServiceAccount
-    name: anz-poc-agent
+    name: ${SERVICE_ACCOUNT}
+    namespace: ${NAMESPACE}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ${SERVICE_ACCOUNT}-job-admin
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: ${NAMESPACE}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ${SERVICE_ACCOUNT}-job-access
+  namespace: ${NAMESPACE}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ${SERVICE_ACCOUNT}-job-admin
+subjects:
+  - kind: ServiceAccount
+    name: ${SERVICE_ACCOUNT}
+    namespace: ${NAMESPACE}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ${SERVICE_ACCOUNT}-dspa-access
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: ${NAMESPACE}
+rules:
+  - apiGroups: ["datasciencepipelinesapplications.opendatahub.io"]
+    resources: ["datasciencepipelinesapplications"]
+    verbs: ["get", "list"]
+  - apiGroups: ["datasciencepipelinesapplications.opendatahub.io"]
+    resources: ["datasciencepipelinesapplications/api"]
+    verbs: ["get", "create", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ${SERVICE_ACCOUNT}-dspa-access
+  namespace: ${NAMESPACE}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ${SERVICE_ACCOUNT}-dspa-access
+subjects:
+  - kind: ServiceAccount
+    name: ${SERVICE_ACCOUNT}
     namespace: ${NAMESPACE}

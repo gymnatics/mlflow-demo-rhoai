@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Deploy ANZ NZ Governance POC
+# Deploy RAG Governance POC
 ################################################################################
 # Deploys the RAG chat app (Chainlit) and Audit Portal (Streamlit) to OpenShift.
 #
@@ -17,6 +17,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source project configuration
+if [ -f "$SCRIPT_DIR/project.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/project.env"
+    set +a
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -47,7 +54,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 [--delete]"
             echo ""
-            echo "Deploys the ANZ NZ Governance POC:"
+            echo "Deploys the RAG Governance POC:"
             echo "  - RAG Chat App (Chainlit) with MLflow tracing"
             echo "  - Audit Portal (Streamlit) for compliance reporting"
             echo ""
@@ -59,7 +66,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_header "ANZ NZ Governance POC"
+export NAMESPACE=${NAMESPACE:-gov-rag-poc}
+export RAG_APP_NAME=${RAG_APP_NAME:-gov-rag-app}
+export AUDIT_PORTAL_NAME=${AUDIT_PORTAL_NAME:-gov-audit-portal}
+export SERVICE_ACCOUNT=${SERVICE_ACCOUNT:-gov-poc-agent}
+export SECRET_NAME=${SECRET_NAME:-gov-poc-secrets}
+export CONFIGMAP_NAME=${CONFIGMAP_NAME:-gov-poc-config}
+
+print_header "RAG Governance POC"
 
 if ! oc whoami &>/dev/null; then
     print_error "Not logged in to OpenShift. Run: oc login <cluster-url>"
@@ -68,13 +82,12 @@ fi
 
 CLUSTER_DOMAIN=$(oc get ingress.config cluster -o jsonpath='{.spec.domain}' 2>/dev/null || echo "apps.cluster.example.com")
 
-export NAMESPACE=${NAMESPACE:-anz-governance-poc}
 export APP_VERSION=${APP_VERSION:-1.0.0}
 
 if [ "$DELETE_MODE" = true ]; then
-    print_step "Removing ANZ POC namespace: $NAMESPACE"
+    print_step "Removing POC namespace: $NAMESPACE"
     oc delete project "$NAMESPACE" --ignore-not-found 2>/dev/null || true
-    print_success "ANZ POC cleaned up"
+    print_success "POC cleaned up"
     exit 0
 fi
 
@@ -128,7 +141,7 @@ fi
 # --- Create namespace ---
 print_step "Creating namespace: $NAMESPACE"
 envsubst < "$SCRIPT_DIR/manifests/namespace.yaml" | oc apply -f - 2>/dev/null || \
-    oc new-project "$NAMESPACE" --display-name="ANZ Governance POC" 2>/dev/null || true
+    oc new-project "$NAMESPACE" --display-name="RAG Governance POC" 2>/dev/null || true
 oc project "$NAMESPACE" 2>/dev/null || true
 print_success "Namespace ready"
 
@@ -139,7 +152,7 @@ print_success "ServiceAccount and MLflow RoleBinding created"
 
 # --- Create secret ---
 print_step "Creating API key secret"
-oc create secret generic anz-poc-secrets \
+oc create secret generic "$SECRET_NAME" \
     --from-literal=llm-api-key="$LLM_API_KEY" \
     -n "$NAMESPACE" --dry-run=client -o yaml | oc apply -f -
 print_success "Secret created"
@@ -151,23 +164,23 @@ print_success "ConfigMap created"
 
 # --- Build images ---
 print_step "Building RAG app container image..."
-oc new-build --name=anz-rag-app \
+oc new-build --name="$RAG_APP_NAME" \
     --binary --strategy=docker \
     -n "$NAMESPACE" 2>/dev/null || true
-oc start-build anz-rag-app \
+oc start-build "$RAG_APP_NAME" \
     --from-dir="$SCRIPT_DIR/rag-app" \
     --follow -n "$NAMESPACE"
-export RAG_APP_IMAGE="image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/anz-rag-app:latest"
+export RAG_APP_IMAGE="image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/${RAG_APP_NAME}:latest"
 print_success "RAG app image built"
 
 print_step "Building Audit Portal container image..."
-oc new-build --name=anz-audit-portal \
+oc new-build --name="$AUDIT_PORTAL_NAME" \
     --binary --strategy=docker \
     -n "$NAMESPACE" 2>/dev/null || true
-oc start-build anz-audit-portal \
+oc start-build "$AUDIT_PORTAL_NAME" \
     --from-dir="$SCRIPT_DIR/audit-portal" \
     --follow -n "$NAMESPACE"
-export AUDIT_PORTAL_IMAGE="image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/anz-audit-portal:latest"
+export AUDIT_PORTAL_IMAGE="image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/${AUDIT_PORTAL_NAME}:latest"
 print_success "Audit Portal image built"
 
 # --- Deploy ---
@@ -181,14 +194,14 @@ print_success "Audit Portal deployed"
 
 # --- Wait for rollout ---
 print_step "Waiting for pods to start..."
-oc rollout status deployment/anz-rag-app -n "$NAMESPACE" --timeout=300s 2>/dev/null || \
+oc rollout status "deployment/${RAG_APP_NAME}" -n "$NAMESPACE" --timeout=300s 2>/dev/null || \
     print_warning "RAG app rollout still in progress"
-oc rollout status deployment/anz-audit-portal -n "$NAMESPACE" --timeout=300s 2>/dev/null || \
+oc rollout status "deployment/${AUDIT_PORTAL_NAME}" -n "$NAMESPACE" --timeout=300s 2>/dev/null || \
     print_warning "Audit Portal rollout still in progress"
 
 # --- Register initial prompt ---
 print_step "Registering initial prompt version (v1)..."
-oc exec deployment/anz-rag-app -n "$NAMESPACE" -- \
+oc exec "deployment/${RAG_APP_NAME}" -n "$NAMESPACE" -- \
     python -c "from prompt_manager import register_prompt; register_prompt('v1')" 2>/dev/null || \
     print_warning "Could not register prompt (will register on first use)"
 
@@ -196,8 +209,8 @@ oc exec deployment/anz-rag-app -n "$NAMESPACE" -- \
 echo ""
 print_header "Deployment Complete"
 
-RAG_ROUTE=$(oc get route anz-rag-app -n "$NAMESPACE" -o jsonpath='{.status.ingress[0].host}' 2>/dev/null || echo "<pending>")
-AUDIT_ROUTE=$(oc get route anz-audit-portal -n "$NAMESPACE" -o jsonpath='{.status.ingress[0].host}' 2>/dev/null || echo "<pending>")
+RAG_ROUTE=$(oc get route "$RAG_APP_NAME" -n "$NAMESPACE" -o jsonpath='{.status.ingress[0].host}' 2>/dev/null || echo "<pending>")
+AUDIT_ROUTE=$(oc get route "$AUDIT_PORTAL_NAME" -n "$NAMESPACE" -o jsonpath='{.status.ingress[0].host}' 2>/dev/null || echo "<pending>")
 
 print_success "RAG Chat App:   https://${RAG_ROUTE}"
 print_success "Audit Portal:   https://${AUDIT_ROUTE}"

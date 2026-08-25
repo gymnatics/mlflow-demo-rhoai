@@ -7,4 +7,4 @@ build/
 .chainlit/
 .files/
 .venv/
-anz_audit_report_*.xlsx
+docs/client-deliverables/

@@ -3,9 +3,10 @@ import os
 LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "https://inference-gateway.apps.cluster.example.com/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3-8b")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-placeholder")
+LLM_JUDGE_ENDPOINT = os.getenv("LLM_JUDGE_ENDPOINT", LLM_ENDPOINT)
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "anz-rag-governance-poc")
+MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "rag-governance-poc")
 MLFLOW_WORKSPACE = os.getenv("MLFLOW_WORKSPACE", "")
 
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")

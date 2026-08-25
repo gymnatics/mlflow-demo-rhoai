@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${PROJECT_PREFIX}-eval-${PROMPT_VERSION}-${TIMESTAMP}
+  namespace: ${NAMESPACE}
+  labels:
+    app: ${PROJECT_PREFIX}-eval
+    app.kubernetes.io/part-of: ${NAMESPACE}
+    eval-prompt-version: "${PROMPT_VERSION}"
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: ${PROJECT_PREFIX}-eval
+    spec:
+      serviceAccountName: ${SERVICE_ACCOUNT}
+      restartPolicy: Never
+      containers:
+        - name: eval
+          image: ${RAG_APP_IMAGE}
+          command: ["python", "eval_runner.py", "-p", "${PROMPT_VERSION}"]
+          envFrom:
+            - configMapRef:
+                name: ${CONFIGMAP_NAME}
+          env:
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_NAME}
+                  key: llm-api-key
+                  optional: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi

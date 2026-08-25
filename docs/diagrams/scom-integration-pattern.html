@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCOM Integration Pattern</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #212529;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 8px;
+      color: #1a73e8;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 48px;
+      text-align: center;
+      max-width: 620px;
+    }
+
+    .diagram {
+      position: relative;
+      width: 940px;
+      height: 300px;
+    }
+
+    .diagram svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .node {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 12px 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .node-mlflow {
+      top: 110px; left: 0;
+      background: #e8f5e9;
+      border: 2px solid #388e3c;
+      color: #2e7d32;
+    }
+
+    .node-otel {
+      top: 110px; left: 220px;
+      background: #fff3e0;
+      border: 2px solid #f57c00;
+      color: #e65100;
+    }
+
+    .node-splunk {
+      top: 40px; left: 530px;
+      background: #f3e5f5;
+      border: 2px solid #7b1fa2;
+      color: #6a1b9a;
+    }
+
+    .node-splunk .node-detail {
+      font-size: 0.65rem;
+      font-weight: 400;
+      color: #9e9e9e;
+      margin-top: 3px;
+    }
+
+    .node-azure {
+      top: 190px; left: 500px;
+      background: #e3f2fd;
+      border: 2px solid #1976d2;
+      color: #1565c0;
+    }
+
+    .node-scom {
+      top: 190px; left: 750px;
+      background: #fbe9e7;
+      border: 2px solid #d32f2f;
+      color: #c62828;
+    }
+
+    .info-box {
+      margin-top: 48px;
+      display: flex;
+      gap: 32px;
+      font-size: 0.78rem;
+    }
+
+    .info-card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px 20px;
+      max-width: 320px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+
+    .info-card h3 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .info-card p {
+      color: #555;
+      line-height: 1.5;
+    }
+
+    .info-card-siem h3 { color: #7b1fa2; }
+    .info-card-scom h3 { color: #d32f2f; }
+  </style>
+</head>
+<body>
+  <h1>SCOM Integration Pattern</h1>
+  <p class="subtitle">
+    No native OTel-to-SCOM integration exists. SCOM receives infrastructure alerts via a bridge, while trace-native platforms store detailed span data.
+  </p>
+
+  <div class="diagram">
+    <svg xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#555" />
+        </marker>
+      </defs>
+
+      <!-- MLflow → OTel Collector -->
+      <line x1="120" y1="130" x2="215" y2="130" stroke="#555" stroke-width="2" marker-end="url(#arrow)" />
+      <text x="167" y="116" text-anchor="middle" font-size="12" font-weight="600" fill="#444">OTLP</text>
+
+      <!-- OTel Collector → Splunk (upper-right) -->
+      <path d="M 360 125 L 420 125 L 420 60 L 525 60"
+            stroke="#555" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+
+      <!-- OTel Collector → Azure Monitor (lower-right) -->
+      <path d="M 360 140 L 420 140 L 420 210 L 495 210"
+            stroke="#555" stroke-width="2" fill="none" marker-end="url(#arrow)" />
+
+      <!-- Azure Monitor → SCOM -->
+      <line x1="660" y1="210" x2="745" y2="210" stroke="#555" stroke-width="2" marker-end="url(#arrow)" />
+    </svg>
+
+    <!-- Nodes -->
+    <div class="node node-mlflow">MLflow traces</div>
+    <div class="node node-otel">OTel Collector</div>
+    <div class="node node-splunk">
+      Splunk / Dynatrace
+      <span class="node-detail">primary trace storage</span>
+    </div>
+    <div class="node node-azure">Azure Monitor bridge</div>
+    <div class="node node-scom">SCOM alerts</div>
+  </div>
+
+  <div class="info-box">
+    <div class="info-card info-card-siem">
+      <h3>Splunk / Dynatrace sees</h3>
+      <p>"This specific interaction was not grounded" — trace-level detail with full span attributes</p>
+    </div>
+    <div class="info-card info-card-scom">
+      <h3>SCOM sees</h3>
+      <p>"The AI system is healthy/unhealthy" — infrastructure-level alerts about system health</p>
+    </div>
+  </div>
+</body>
+</html>

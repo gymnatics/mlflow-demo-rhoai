@@ -1,11 +1,12 @@
-chainlit
 mlflow[kubernetes,genai]>=3.11
+openai
+pandas
+numpy
 langchain
 langchain-community
 langchain-openai
 langchain-huggingface
 faiss-cpu
 sentence-transformers
-openai
 eval-hub-sdk[client]
 boto3

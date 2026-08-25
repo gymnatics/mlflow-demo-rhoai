@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: anz-rag-app
+  name: ${RAG_APP_NAME}
   namespace: ${NAMESPACE}
   labels:
-    app: anz-rag-app
-    app.kubernetes.io/part-of: anz-governance-poc
+    app: ${RAG_APP_NAME}
+    app.kubernetes.io/part-of: ${NAMESPACE}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: anz-rag-app
+      app: ${RAG_APP_NAME}
   template:
     metadata:
       labels:
-        app: anz-rag-app
-        app.kubernetes.io/part-of: anz-governance-poc
+        app: ${RAG_APP_NAME}
+        app.kubernetes.io/part-of: ${NAMESPACE}
     spec:
-      serviceAccountName: anz-poc-agent
+      serviceAccountName: ${SERVICE_ACCOUNT}
       containers:
         - name: rag-app
           image: ${RAG_APP_IMAGE}
@@ -25,12 +25,12 @@ spec:
             - containerPort: 8000
           envFrom:
             - configMapRef:
-                name: anz-poc-config
+                name: ${CONFIGMAP_NAME}
           env:
             - name: LLM_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: anz-poc-secrets
+                  name: ${SECRET_NAME}
                   key: llm-api-key
                   optional: true
           resources:
@@ -44,13 +44,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: anz-rag-app
+  name: ${RAG_APP_NAME}
   namespace: ${NAMESPACE}
   labels:
-    app: anz-rag-app
+    app: ${RAG_APP_NAME}
 spec:
   selector:
-    app: anz-rag-app
+    app: ${RAG_APP_NAME}
   ports:
     - port: 8000
       targetPort: 8000
@@ -59,14 +59,14 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: anz-rag-app
+  name: ${RAG_APP_NAME}
   namespace: ${NAMESPACE}
   labels:
-    app: anz-rag-app
+    app: ${RAG_APP_NAME}
 spec:
   to:
     kind: Service
-    name: anz-rag-app
+    name: ${RAG_APP_NAME}
   port:
     targetPort: 8000
   tls:

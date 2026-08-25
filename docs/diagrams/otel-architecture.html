@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTel / SIEM Integration – Architecture</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #212529;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 8px;
+      color: #1a73e8;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 48px;
+    }
+
+    .diagram {
+      position: relative;
+      width: 920px;
+      height: 300px;
+    }
+
+    .diagram svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .node {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 12px 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .node-rag {
+      top: 70px; left: 0;
+      background: #e3f2fd;
+      border: 2px solid #1976d2;
+      color: #1565c0;
+    }
+
+    .node-mlflow {
+      top: 70px; left: 230px;
+      background: #e8f5e9;
+      border: 2px solid #388e3c;
+      color: #2e7d32;
+    }
+
+    .node-otel {
+      top: 70px; left: 490px;
+      background: #fff3e0;
+      border: 2px solid #f57c00;
+      color: #e65100;
+    }
+
+    .node-siem {
+      top: 70px; left: 720px;
+      background: #f3e5f5;
+      border: 2px solid #7b1fa2;
+      color: #6a1b9a;
+    }
+
+    .node-audit {
+      top: 220px; left: 310px;
+      background: #fafafa;
+      border: 2px dashed #78909c;
+      color: #546e7a;
+    }
+
+    .legend {
+      margin-top: 48px;
+      display: flex;
+      gap: 32px;
+      font-size: 0.78rem;
+      color: #666;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-line-solid {
+      width: 28px;
+      height: 2px;
+      background: #555;
+    }
+
+    .legend-line-dashed {
+      width: 28px;
+      height: 0;
+      border-top: 2px dashed #78909c;
+    }
+  </style>
+</head>
+<body>
+  <h1>OTel / SIEM Integration – Architecture</h1>
+  <p class="subtitle">How MLflow traces flow from the RAG app to enterprise observability</p>
+
+  <div class="diagram">
+    <svg xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#555" />
+        </marker>
+        <marker id="arrow-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#78909c" />
+        </marker>
+      </defs>
+
+      <!-- RAG App → MLflow Server -->
+      <line x1="105" y1="90" x2="225" y2="90" stroke="#555" stroke-width="2" marker-end="url(#arrow)" />
+      <text x="165" y="74" text-anchor="middle" font-size="12" font-weight="600" fill="#444">Traces</text>
+
+      <!-- MLflow Server → OTel Collector -->
+      <line x1="370" y1="90" x2="485" y2="90" stroke="#555" stroke-width="2" marker-end="url(#arrow)" />
+      <text x="427" y="74" text-anchor="middle" font-size="12" font-weight="600" fill="#444">OTLP</text>
+
+      <!-- OTel Collector → Enterprise SIEM -->
+      <line x1="625" y1="90" x2="715" y2="90" stroke="#555" stroke-width="2" marker-end="url(#arrow)" />
+
+      <!-- MLflow Server → Audit Portal (branch down) -->
+      <path d="M 300 108 L 300 170 L 370 170 L 370 215"
+            stroke="#78909c" stroke-width="2" stroke-dasharray="6 4" fill="none"
+            marker-end="url(#arrow-dashed)" />
+      <text x="330" y="148" text-anchor="middle" font-size="12" font-weight="600" fill="#546e7a">API</text>
+    </svg>
+
+    <!-- Nodes -->
+    <div class="node node-rag">RAG App</div>
+    <div class="node node-mlflow">MLflow Server</div>
+    <div class="node node-otel">OTel Collector</div>
+    <div class="node node-siem">Enterprise SIEM</div>
+    <div class="node node-audit">Audit Portal (POC)</div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-line-solid"></div>
+      <span>Production path (OTLP export)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-line-dashed"></div>
+      <span>POC path (direct API query)</span>
+    </div>
+  </div>
+</body>
+</html>

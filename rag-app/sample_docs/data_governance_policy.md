@@ -1,4 +1,4 @@
-# ANZ New Zealand Data Governance and AI Policy (Sample)
+# Data Governance and AI Policy (Sample)
 
 **Document ID:** POL-DGOV-2025-001
 **Version:** 2.0
@@ -7,7 +7,7 @@
 
 ## 1. Purpose
 
-This policy establishes the data governance framework for the use of data and artificial intelligence within ANZ Bank New Zealand, ensuring compliance with the Privacy Act 2020, the New Zealand Information Privacy Principles (IPPs), and the Bank's enterprise risk management framework.
+This policy establishes the data governance framework for the use of data and artificial intelligence within the institution, ensuring compliance with applicable privacy legislation, information privacy principles, and the institution's enterprise risk management framework.
 
 ## 2. Data Classification
 
@@ -75,9 +75,9 @@ The following additional controls apply to Generative AI (GenAI) systems, includ
 
 ## 5. Privacy and Consent
 
-### 5.1 Privacy Act 2020 Compliance
+### 5.1 Privacy Legislation Compliance
 
-All data processing activities must comply with the 13 Information Privacy Principles (IPPs) under the Privacy Act 2020, including:
+All data processing activities must comply with the Information Privacy Principles (IPPs) under applicable privacy legislation, including:
 
 - **IPP 1 (Purpose):** Personal information must only be collected for a lawful purpose connected with the Bank's functions.
 - **IPP 3 (Collection from subject):** Where reasonably practicable, personal information must be collected directly from the individual concerned.

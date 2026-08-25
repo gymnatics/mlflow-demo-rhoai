@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: anz-audit-portal
+  name: ${AUDIT_PORTAL_NAME}
   namespace: ${NAMESPACE}
   labels:
-    app: anz-audit-portal
-    app.kubernetes.io/part-of: anz-governance-poc
+    app: ${AUDIT_PORTAL_NAME}
+    app.kubernetes.io/part-of: ${NAMESPACE}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: anz-audit-portal
+      app: ${AUDIT_PORTAL_NAME}
   template:
     metadata:
       labels:
-        app: anz-audit-portal
-        app.kubernetes.io/part-of: anz-governance-poc
+        app: ${AUDIT_PORTAL_NAME}
+        app.kubernetes.io/part-of: ${NAMESPACE}
     spec:
-      serviceAccountName: anz-poc-agent
+      serviceAccountName: ${SERVICE_ACCOUNT}
       containers:
         - name: audit-portal
           image: ${AUDIT_PORTAL_IMAGE}
@@ -25,7 +25,7 @@ spec:
             - containerPort: 8501
           envFrom:
             - configMapRef:
-                name: anz-poc-config
+                name: ${CONFIGMAP_NAME}
           resources:
             requests:
               cpu: 250m
@@ -37,13 +37,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: anz-audit-portal
+  name: ${AUDIT_PORTAL_NAME}
   namespace: ${NAMESPACE}
   labels:
-    app: anz-audit-portal
+    app: ${AUDIT_PORTAL_NAME}
 spec:
   selector:
-    app: anz-audit-portal
+    app: ${AUDIT_PORTAL_NAME}
   ports:
     - port: 8501
       targetPort: 8501
@@ -52,14 +52,14 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: anz-audit-portal
+  name: ${AUDIT_PORTAL_NAME}
   namespace: ${NAMESPACE}
   labels:
-    app: anz-audit-portal
+    app: ${AUDIT_PORTAL_NAME}
 spec:
   to:
     kind: Service
-    name: anz-audit-portal
+    name: ${AUDIT_PORTAL_NAME}
   port:
     targetPort: 8501
   tls:

@@ -1,4 +1,4 @@
-# ANZ New Zealand KYC and AML Policy (Sample)
+# KYC and AML Policy (Sample)
 
 **Document ID:** POL-KYC-2025-001
 **Version:** 4.1
@@ -15,7 +15,7 @@ This policy establishes the requirements for Customer Due Diligence (CDD) and An
 
 All new individual customers must provide:
 
-- **Primary identification:** New Zealand passport, New Zealand driver licence, or overseas passport with valid visa.
+- **Primary identification:** Government-issued passport, driver licence, or overseas passport with valid visa.
 - **Secondary identification:** Utility bill, bank statement, or government correspondence (less than 3 months old) confirming residential address.
 - **Electronic verification:** Where possible, identity should be verified electronically through approved identity verification services (e.g., RealMe, DIA Identity Verification Service).
 
@@ -24,7 +24,7 @@ All new individual customers must provide:
 Business customers must provide:
 
 - Certificate of Incorporation or equivalent registration document.
-- Company extract from the New Zealand Companies Office (less than 3 months old).
+- Company extract from the national Companies Office (less than 3 months old).
 - Identification and verification of all beneficial owners holding 25% or more ownership.
 - Identification and verification of at least one director or authorised signatory.
 - Trust deed (for trusts) or partnership agreement (for partnerships).
@@ -50,14 +50,14 @@ EDD procedures include:
 ### 3.1 Suspicious Activity Reporting
 
 - All staff must report any transaction or activity that they suspect may be related to money laundering or terrorism financing.
-- Suspicious Activity Reports (SARs) must be filed with the Financial Intelligence Unit (FIU) of the New Zealand Police.
+- Suspicious Activity Reports (SARs) must be filed with the national Financial Intelligence Unit (FIU).
 - Internal reporting must be made within 24 hours of forming the suspicion.
 - Tipping off the customer about a SAR is a criminal offence.
 
 ### 3.2 Threshold Reporting
 
-- All cash transactions of NZD 10,000 or more (or equivalent in foreign currency) must be reported to the FIU.
-- International wire transfers of NZD 1,000 or more must include originator information.
+- All cash transactions of $ 10,000 or more (or equivalent in foreign currency) must be reported to the FIU.
+- International wire transfers of $ 1,000 or more must include originator information.
 - Prescribed Transaction Reports (PTRs) must be submitted within 10 working days.
 
 ### 3.3 Automated Monitoring
@@ -83,7 +83,7 @@ EDD procedures include:
 
 ## 5. Sanctions Screening
 
-- All customers, transactions, and counterparties must be screened against applicable sanctions lists including: United Nations Security Council, OFAC (US), EU, UK, Australia (DFAT), and New Zealand Autonomous Sanctions.
+- All customers, transactions, and counterparties must be screened against applicable sanctions lists including: United Nations Security Council, OFAC (US), EU, UK, and applicable national autonomous sanctions.
 - Screening must occur at onboarding, on an ongoing basis, and when sanctions lists are updated.
 - Any positive match must be escalated to the Compliance team immediately.
 - Transactions must not be processed until sanctions screening is complete and cleared.
@@ -100,4 +100,4 @@ EDD procedures include:
 - All staff must complete AML/CFT awareness training within 30 days of commencing employment.
 - Refresher training must be completed annually.
 - Specialised training is required for staff in higher-risk roles (e.g., compliance, trade finance, correspondent banking).
-- Training records must be maintained and available for inspection by the AML/CFT supervisor (Department of Internal Affairs or Reserve Bank of New Zealand).
+- Training records must be maintained and available for inspection by the AML/CFT supervisor.

@@ -1,0 +1,21 @@
+First Name,Last Name,Credit Card Number,Email,Phone,SSN,Join Date,Last Transaction,Account Tier,Region
+James,Henderson,4532 7891 2345 6780,james.henderson@globalcorp.com,+1-415-555-0123,482-91-3347,2019-03-14,2026-07-18,Enterprise,NA-West
+Maria,Gonzalez,5412 3456 7890 1234,maria.gonzalez@techstart.io,+1-212-555-0198,631-08-7721,2021-08-02,2026-07-20,Pro,NA-East
+David,Nakamura,3782 822463 10005,d.nakamura@enterprise.co.jp,+81-3-5555-4421,159-44-8832,2020-11-25,2026-07-15,Enterprise,APAC
+Sarah,O'Brien,6011 5678 9012 3456,sarah.obrien@finservices.com,+1-617-555-0147,274-63-9918,2022-01-10,2026-07-19,Pro,NA-East
+Ahmed,Patel,4916 3389 2210 4455,ahmed.patel@cloudnative.dev,+44-20-7555-3302,518-27-6643,2023-05-17,2026-07-21,Standard,EMEA
+Lisa,Johansson,5500 1234 5678 9012,l.johansson@nordicbank.se,+46-8-555-1190,703-55-2214,2020-06-30,2026-07-12,Enterprise,EMEA
+Robert,Chen,4024 0071 8834 5521,robert.chen@megahealth.org,+1-650-555-0276,846-19-0037,2018-09-22,2026-07-17,Enterprise,NA-West
+Priya,Sharma,5425 9988 7766 5544,priya.sharma@dataops.in,+91-22-5555-8841,392-70-4456,2024-02-08,2026-07-20,Standard,APAC
+Michael,Williams,6011 0012 3456 7890,m.williams@lawgroup.com,+1-312-555-0389,067-38-1129,2021-12-01,2026-07-14,Pro,NA-Central
+Elena,Volkov,4539 8821 0033 7744,elena.volkov@securemail.ru,+7-495-555-2208,541-82-6690,2022-07-19,2026-07-16,Standard,EMEA
+Thomas,Mueller,4716 5544 3322 1100,t.mueller@autowerk.de,+49-89-555-7734,228-46-5501,2019-10-05,2026-07-19,Enterprise,EMEA
+Yuki,Tanaka,5321 6677 8899 0011,yuki.tanaka@sakura-tech.jp,+81-6-5555-2290,415-73-8824,2023-03-28,2026-07-21,Pro,APAC
+Carlos,Rivera,4024 9911 2233 4455,carlos.rivera@latamops.mx,+52-55-5555-6618,662-14-3379,2021-06-12,2026-07-18,Standard,LATAM
+Hannah,Park,6011 7788 9900 1122,hannah.park@seouldata.kr,+82-2-555-4410,339-58-7712,2022-09-03,2026-07-20,Pro,APAC
+Omar,Farouk,5412 1100 2233 4455,omar.farouk@nilebank.eg,+20-2-5555-3301,774-21-9936,2024-01-15,2026-07-17,Standard,MEA
+Sophie,Dubois,4532 6655 4433 2211,sophie.dubois@eurofin.fr,+33-1-5555-8827,183-09-4458,2020-04-22,2026-07-21,Enterprise,EMEA
+Raj,Krishnan,5500 7766 5544 3322,raj.krishnan@infosync.in,+91-80-5555-1167,907-33-6645,2023-08-09,2026-07-15,Pro,APAC
+Olivia,Thompson,4916 2211 3344 5566,olivia.thompson@healthnet.ca,+1-604-555-0244,456-81-2203,2021-02-18,2026-07-19,Enterprise,NA-West
+Andrei,Popescu,3782 998877 66554,andrei.popescu@devhub.ro,+40-21-555-9943,612-47-8890,2022-11-30,2026-07-13,Standard,EMEA
+Mei,Zhang,4024 3344 5566 7788,mei.zhang@shenzhenai.cn,+86-755-5555-0082,538-62-1147,2020-08-14,2026-07-20,Enterprise,APAC

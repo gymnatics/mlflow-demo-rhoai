@@ -19,7 +19,7 @@ RAG App ──traces──> MLflow Server ──OTLP──> OTel Collector ─�
 ### Step 1: Deploy the OTel Collector
 
 ```bash
-export NAMESPACE=anz-governance-poc
+export NAMESPACE=gov-rag-poc  # or your deployed namespace
 envsubst < manifests/otel-collector.yaml | oc apply -f -
 ```
 
@@ -43,7 +43,7 @@ metadata:
 spec:
   env:
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: "http://otel-collector.anz-governance-poc.svc:4317"
+      value: "http://otel-collector.${NAMESPACE}.svc:4317"
 ```
 
 ### Step 3: Configure the OTel Collector Exporter
@@ -89,6 +89,74 @@ service:
       exporters: [elasticsearch]
 ```
 
+#### Dynatrace
+
+Dynatrace requires **delta temporality** for metrics. Use the `otlphttp` exporter with the `cumulativetodelta` processor.
+
+Reference:
+- [Implement LLM observability with Dynatrace on OpenShift AI](https://developers.redhat.com/articles/2025/05/21/implement-llm-observability-dynatrace-openshift-ai) (Red Hat Developer)
+- [RHEcosystemAppEng/dynatrace Helm chart](https://github.com/RHEcosystemAppEng/dynatrace) (reference deployment)
+
+```yaml
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+  cumulativetodelta:
+    include:
+      match_type: regexp
+      metrics:
+        - ".*"
+
+exporters:
+  otlphttp/dynatrace:
+    endpoint: "https://{your-environment-id}.live.dynatrace.com/api/v2/otlp"
+    headers:
+      Authorization: "Api-Token ${DYNATRACE_API_TOKEN}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/dynatrace]
+    metrics:
+      receivers: [otlp]
+      processors: [batch, cumulativetodelta]
+      exporters: [otlphttp/dynatrace]
+```
+
+**Dynatrace setup notes:**
+- Generate an API token with `openTelemetryTrace.ingest` and `metrics.ingest` scopes
+- The `cumulativetodelta` processor is required because Dynatrace expects delta temporality for cumulative metrics
+- For OpenShift, you can deploy the Dynatrace OTel integration via the Helm chart at `RHEcosystemAppEng/dynatrace`
+- Traces will appear in Dynatrace under Distributed Traces, with full span attributes visible
+
+#### SCOM (System Center Operations Manager) -- Gap Documentation
+
+**Status: No native OTel-to-SCOM integration exists.**
+
+SCOM is an infrastructure monitoring tool, not a trace-native observability platform. It does not support OTLP ingestion or distributed trace visualization.
+
+**Recommended pattern:**
+
+```
+MLflow traces ──OTLP──> OTel Collector ──> Splunk / Dynatrace (primary trace storage)
+                                        └──> Azure Monitor bridge ──> SCOM alerts
+```
+
+- **Primary trace data** goes to Splunk and/or Dynatrace (both support OTLP natively)
+- **SCOM receives infrastructure alerts** about AI system health, not raw trace data
+- **Integration options:**
+  1. **Azure Monitor bridge**: If SCOM is connected to Azure Monitor, configure OTel Collector to export metrics to Azure Monitor, which forwards alerts to SCOM
+  2. **Webhook alerts**: Configure alerting rules in Splunk/Dynatrace to send webhooks to SCOM when anomalous patterns are detected (high latency, error spikes, groundedness drops)
+  3. **Log forwarding**: Export OTel Collector health metrics to SCOM via syslog or Windows Event Log for infrastructure-level monitoring
+
+**What SCOM sees:** "The AI system is healthy/unhealthy" (infrastructure alerts)
+**What Splunk/Dynatrace sees:** "This specific interaction was not grounded" (trace-level detail)
+
+This is the standard pattern for organisations running SCOM alongside modern observability tools.
+
 #### Jaeger (for development/staging)
 
 ```yaml
@@ -105,6 +173,22 @@ service:
       processors: [batch]
       exporters: [otlp/jaeger]
 ```
+
+## RHOAI 3.4 Observability Reference
+
+For the official RHOAI 3.4 observability documentation, see [Chapter 12: Managing observability](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/managing_openshift_ai/managing-observability_managing-rhoai). This covers:
+
+- Metrics export via the DSCI Custom Resource
+- Tracing via Tempo + OTel Collector
+- OTLP endpoint configuration for MLflow
+
+## Enterprise Configuration Summary
+
+| Tool | OTel Integration | Status |
+|----------|-----------------|--------|
+| **Splunk** | `splunk_hec` exporter | Supported -- config above |
+| **Dynatrace** | `otlphttp` exporter + `cumulativetodelta` processor | Supported -- config above |
+| **SCOM** | No native OTLP support | Gap -- receives alerts via Splunk/Dynatrace/Azure Monitor bridge |
 
 ## What Gets Exported
 
@@ -124,9 +208,9 @@ Each MLflow trace exported via OTLP includes:
 | `span.inputs` | User query / prompt content |
 | `span.outputs` | Model response content |
 
-## Mapping to ANZ Requirements
+## Mapping to Enterprise Requirements
 
-| ANZ Requirement | SIEM Capability |
+| Requirement | SIEM Capability |
 |----------------|-----------------|
 | Prompt and output logging (KPI 1.3) | Full prompt/response captured in trace spans, searchable in SIEM |
 | Long-term retention | SIEM retention policies apply to trace data |
@@ -139,8 +223,8 @@ After enabling, verify traces are flowing:
 
 ```bash
 # Check OTel Collector logs
-oc logs deployment/otel-collector -n anz-governance-poc
+oc logs deployment/otel-collector -n ${NAMESPACE}
 
 # Run a test query through the RAG app, then check for traces
-oc logs deployment/otel-collector -n anz-governance-poc | grep "trace_id"
+oc logs deployment/otel-collector -n ${NAMESPACE} | grep "trace_id"
 ```

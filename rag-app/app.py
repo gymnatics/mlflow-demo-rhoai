@@ -1,9 +1,19 @@
 """Chainlit RAG chat application with MLflow tracing and Steps visualization."""
 
 import chainlit as cl
+from chainlit.input_widget import Select
 from rag_pipeline import RAGPipeline
 from prompt_manager import load_prompt, list_prompt_versions, register_prompt
 import config
+
+
+def _get_version_choices() -> list[str]:
+    """Get available prompt versions from the registry."""
+    versions = list_prompt_versions()
+    choices = [f"{v['version']}" for v in versions]
+    if not choices:
+        choices = ["1", "2"]
+    return choices
 
 
 @cl.on_chat_start
@@ -17,15 +27,29 @@ async def on_start():
     system_prompt, prompt_meta = load_prompt()
     prompt_version = prompt_meta.get("prompt_version", "fallback")
 
+    version_choices = _get_version_choices()
+    settings = await cl.ChatSettings(
+        [
+            Select(
+                id="prompt_version",
+                label="Prompt Version",
+                values=["latest"] + version_choices,
+                initial_value="latest",
+                description="Select which prompt version the assistant uses",
+            ),
+        ]
+    ).send()
+
     await cl.Message(
         content=(
-            f"**ANZ Banking Policy Assistant** ready.\n\n"
+            f"**Policy Compliance Assistant** ready.\n\n"
             f"- **Documents indexed:** {num_chunks} chunks from {config.SAMPLE_DOCS_DIR}\n"
             f"- **Prompt version:** {prompt_version}\n"
             f"- **Model:** {config.LLM_MODEL} @ {config.LLM_ENDPOINT}\n"
             f"- **Embedding model:** {config.EMBEDDING_MODEL}\n"
             f"- **App version:** {config.APP_VERSION}\n\n"
-            f"All interactions are traced in MLflow. Ask me anything about ANZ banking policies."
+            f"All interactions are traced in MLflow. Ask me anything about the indexed policies.\n\n"
+            f"*Use the settings (gear icon) to switch prompt versions.*"
         )
     ).send()
 
@@ -33,6 +57,31 @@ async def on_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     pipeline: RAGPipeline = cl.user_session.get("pipeline")
+
+    if message.elements:
+        for element in message.elements:
+            name = getattr(element, "name", "") or ""
+            path = getattr(element, "path", None)
+            if not path:
+                continue
+            if name.lower().endswith((".md", ".txt", ".csv")):
+                try:
+                    num_chunks = pipeline.add_documents(path, name)
+                    await cl.Message(
+                        content=f"Added **{name}** to the knowledge base ({num_chunks} chunks indexed). You can now ask questions about it."
+                    ).send()
+                except Exception as e:
+                    await cl.Message(
+                        content=f"Failed to process **{name}**: {e}"
+                    ).send()
+            else:
+                await cl.Message(
+                    content=f"Unsupported file type: **{name}**. Please upload `.md`, `.txt`, or `.csv` files."
+                ).send()
+
+        if not message.content or not message.content.strip():
+            return
+
     user_question = message.content
 
     # --- Step 1: Retrieve context ---
